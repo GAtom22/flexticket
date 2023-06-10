@@ -10,6 +10,7 @@ import "./EventTicket.sol";
 contract TicketManager is Ownable {
   using SafeMath for uint256;
   // Public variables
+  uint256 public tierName; // The name of the ticket tier
   uint256 public basePrice; // The base price of each ticket
   address public nftAddress; // The address of the NFT contract (tickets)
   uint256 public totalTickets; // The total number of tickets available for sale
@@ -22,11 +23,12 @@ contract TicketManager is Ownable {
   // Mapping to keep track of the number of tickets owned by each buyer
   mapping(address => mapping(address => uint256)) ticketBalances;
 
-  event TicketPurchased(address indexed buyer, uint256 price);
+  event TicketPurchased(address indexed buyer, string tierName, uint256 price);
   event BasePriceChanged(uint256 price);
 
   constructor(
     string memory _eventName,
+    string memory _tierName,
     string memory _baseURI,
     string memory _symbol,
     uint256 _basePrice,
@@ -35,6 +37,7 @@ contract TicketManager is Ownable {
     uint256 _endTime
   ) {
     // Initialize public variables
+    tierName = _tierName;
     basePrice = _basePrice;
     totalTickets = _totalTickets;
     startTime = _startTime;
@@ -65,7 +68,7 @@ contract TicketManager is Ownable {
     ticketsSold++;
     totalRevenue += msg.value;
 
-    emit TicketPurchased(msg.sender, msg.value);
+    emit TicketPurchased(msg.sender, tierName, msg.value);
   }
 
   // Function to get the current price of a ticket based on market conditions
