@@ -35,7 +35,7 @@ contract EventManager {
   mapping(uint256 => mapping(uint256 => address)) public ticketManagers;
 
   modifier validEventAndTier(uint256 _eventId, uint256 _ticketTier) {
-    require(_eventId < events.length, "Invalid event ID");
+    require(_eventId < eventsCount, "Invalid event ID");
     require(ticketManagers[_eventId][_ticketTier] != address(0), "Ticket tier for this event does not exist");
     _;
   }
@@ -56,7 +56,7 @@ contract EventManager {
     events.push(newEvent);
     eventsCount++;
 
-    uint256 eventId = events.length - 1;
+    uint256 eventId = eventsCount - 1;
     // Copy the elements from memory to storage
     for (uint256 i = 0; i < _ticketTiers.length; i++) {
       ticketTiers[eventId].push(_ticketTiers[i]);
@@ -64,7 +64,7 @@ contract EventManager {
   }
 
   function launchEvent(uint256 _eventId) public {
-    require(_eventId < events.length, "Invalid event ID");
+    require(_eventId < eventsCount, "Invalid event ID");
 
     Event memory e = events[_eventId];
     require(msg.sender == e.owner, "Only event owner can launch the event");
@@ -95,6 +95,10 @@ contract EventManager {
   function getTicketPrice(uint256 _eventId, uint256 _ticketTier) public validEventAndTier(_eventId, _ticketTier) returns (uint256) {
     TicketManager ticketManager = TicketManager(ticketManagers[_eventId][_ticketTier]);
     return ticketManager.getCurrentPrice();
+  }
+
+  function getAllEvents() public view returns (Event[] memory) {
+    return events;
   }
 
   function buyTicket(uint256 _eventId, uint256 _ticketTier) public payable validEventAndTier(_eventId, _ticketTier) {
@@ -128,7 +132,7 @@ contract EventManager {
   }
 
   function withdrawAll(uint256 _eventId) public {
-    require(_eventId < events.length, "Invalid event ID");
+    require(_eventId < eventsCount, "Invalid event ID");
     TicketTier[] memory tiers = ticketTiers[_eventId];
 
     Event memory e = events[_eventId];
