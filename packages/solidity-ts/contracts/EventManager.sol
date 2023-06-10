@@ -65,7 +65,9 @@ contract EventManager {
 
   function launchEvent(uint256 _eventId) public {
     require(_eventId < events.length, "Invalid event ID");
+
     Event memory e = events[_eventId];
+    require(msg.sender == e.owner, "Only event owner can launch the event");
 
     // deploy a TicketManager for each tier
     // and store on the ticketManagers mapping
@@ -128,6 +130,9 @@ contract EventManager {
   function withdrawAll(uint256 _eventId) public {
     require(_eventId < events.length, "Invalid event ID");
     TicketTier[] memory tiers = ticketTiers[_eventId];
+
+    Event memory e = events[_eventId];
+    require(msg.sender == e.owner, "Only event owner can withdraw the event's revenue");
 
     for (uint256 i = 0; i < tiers.length; i++) {
       if (ticketManagers[_eventId][i] != address(0)) {

@@ -81,15 +81,17 @@ contract TicketManager is Ownable {
     EventTicket nftContract = EventTicket(nftAddress);
 
     // Mint new ticket NFT and transfer ownership to the buyer
-    nftContract.mint(msg.sender);
+    // for now, the purchased tickets go to the EOA that initiatied the purchase
+    address buyer = tx.origin;
+    nftContract.mint(buyer);
 
     // Update the ticket balance of the buyer
-    ticketBalances[msg.sender][nftAddress]++;
+    ticketBalances[buyer][nftAddress]++;
 
     ticketsSold++;
     totalRevenue += msg.value;
 
-    emit TicketPurchased(msg.sender, eventId, tierId, msg.value);
+    emit TicketPurchased(buyer, eventId, tierId, msg.value);
   }
 
   // Function to get the current price of a ticket based on market conditions
