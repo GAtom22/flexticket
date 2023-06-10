@@ -10,9 +10,13 @@ import "./EventTicket.sol";
 contract TicketManager is Ownable {
   using SafeMath for uint256;
   // Public variables
-  uint256 public tierName; // The name of the ticket tier
+  uint256 public eventName; // The name of the event
+  uint256 public eventId; // The event id
+  uint256 public tierId; // The ticket tier id
   uint256 public basePrice; // The base price of each ticket
   uint256 public initialPrice; // The initial price of the ticket tier. Used for the getCurrentPrice equation that starts with a high initial price
+  uint256 public priceSlope; // The slope of the decreasing pricing equation
+  uint256 public yIntercept; // The y-intercept of the decreasing pricing equation
   address public nftAddress; // The address of the NFT contract (tickets)
   uint256 public totalTickets; // The total number of tickets available for sale
   uint256 public ticketsSold; // The number of tickets sold so far
@@ -24,12 +28,14 @@ contract TicketManager is Ownable {
   // Mapping to keep track of the number of tickets owned by each buyer
   mapping(address => mapping(address => uint256)) ticketBalances;
 
-  event TicketPurchased(address indexed buyer, string tierName, uint256 price);
-  event BasePriceChanged(uint256 price);
+  event TicketPurchased(address indexed buyer, uint256 eventId, uint256 tierId, uint256 price);
+  event BasePriceChanged(uint256 eventId, uint256 tierId, uint256 price);
+  event PriceChanged(uint256 eventId, uint256 tierId, uint256 price);
 
   constructor(
     string memory _eventName,
-    string memory _tierName,
+    uint256 _eventId,
+    uint256 _tierId,
     string memory _baseURI,
     string memory _symbol,
     uint256 _basePrice,
@@ -39,11 +45,17 @@ contract TicketManager is Ownable {
     uint256 _endTime
   ) {
     // Initialize public variables
-    tierName = _tierName;
+    eventId = _eventId;
+    tierId = _tierId;
     basePrice = _basePrice;
+    initialPrice = _initialPrice;
     totalTickets = _totalTickets;
     startTime = _startTime;
     endTime = _endTime;
+
+    uint256 timeSpan = _endTime.sub(_startTime);
+    priceSlope = basePrice.sub(initialPrice).div(timeSpan);
+    yIntercept = initialPrice.sub(startTime.mul(priceSlope));
 
     // Create a new NFT contract for the event
     EventTicket nftContract = new EventTicket(string(abi.encodePacked(_eventName, " Ticket")), _symbol, _totalTickets, _baseURI);
@@ -70,16 +82,18 @@ contract TicketManager is Ownable {
     ticketsSold++;
     totalRevenue += msg.value;
 
-    emit TicketPurchased(msg.sender, tierName, msg.value);
+    emit TicketPurchased(msg.sender, eventId, tierId, msg.value);
   }
 
   // Function to get the current price of a ticket based on market conditions
-  function getCurrentPrice() public view returns (uint256) {
+  function getCurrentPrice() public returns (uint256) {
     require(block.timestamp <= endTime, "Ticket sales ended");
     uint256 ticketsLeft = totalTickets.sub(ticketsSold);
     require(ticketsLeft > 0, "No more tickets left!");
 
-    uint256 timeLeft = endTime.sub(block.timestamp).div(3600); // time left in hours
+    uint256 timeLeft = endTime.sub(block.timestamp).div(3600); // time left
+    uint256 hoursLeft = timeLeft.div(3600); // time left in hours
+    uint256 adjustedPrice;
 
     // Calculate the average number of tickets sold per hour
     uint256 hoursElapsed = block.timestamp.sub(startTime).div(3600);
@@ -90,26 +104,45 @@ contract TicketManager is Ownable {
 
     // no sales rate, use base price
     if (saleRate == 0) {
-      return basePrice;
+      // gradually decrease the initialPrice
+      // linear eq: price = time . slope + yInt
+      adjustedPrice = yIntercept.add(block.timestamp.mul(priceSlope));
+
+      emit PriceChanged(eventId, tierId, adjustedPrice);
+
+      return adjustedPrice;
     }
 
     // Calculate the target sale rate based on the remaining time and inventory
     // Sell remaining tickets in half the remaining time
-    if (timeLeft == 0) {
-      timeLeft = 1;
+    if (hoursLeft == 0) {
+      hoursLeft = 1;
     }
-    uint256 targetSaleRate = ticketsLeft.mul(2).div(timeLeft);
+    uint256 targetSaleRate = ticketsLeft.mul(2).div(hoursLeft);
 
-    // Calculate the adjustment factor based on the difference between the target and actual sale rates
-    uint256 adjustmentFactor;
-    if (saleRate >= targetSaleRate) {
-      adjustmentFactor = saleRate.sub(targetSaleRate).mul(100).div(targetSaleRate);
-    } else {
-      adjustmentFactor = targetSaleRate.sub(saleRate).mul(100).div(targetSaleRate);
-    }
+    // start at initial price
+    // decrease if salesRate < targetRate
+    // increase if salesRate > targetRate
+
+    // Calculate the adjustment factor based on the difference
+    // between the target and actual sale rates
+    uint256 adjustmentFactor = saleRate.sub(targetSaleRate).mul(100).div(targetSaleRate);
+
+    uint256 price = yIntercept.add(block.timestamp.mul(priceSlope));
 
     //Apply the adjustment factor to the base price
-    uint256 adjustedPrice = basePrice.add(adjustmentFactor);
+    adjustedPrice = price.add(adjustmentFactor);
+
+    // price cannot be lower than basePrice
+    if (adjustedPrice < basePrice) {
+      adjustedPrice = basePrice;
+    } else {
+      // update the y-intercept and slope
+      priceSlope = basePrice.sub(adjustedPrice).div(timeLeft);
+      yIntercept = adjustedPrice.sub(block.timestamp.mul(priceSlope));
+    }
+
+    emit PriceChanged(eventId, tierId, adjustedPrice);
 
     return adjustedPrice;
   }
@@ -117,7 +150,7 @@ contract TicketManager is Ownable {
   // updateBasePrice function allows the contract owner to update the base ticket price for the event
   function updateBasePrice(uint256 newPrice) public onlyOwner {
     basePrice = newPrice;
-    emit BasePriceChanged(newPrice);
+    emit BasePriceChanged(eventId, tierId, newPrice);
   }
 
   // updateTicketURI function allows the contract owner to update the base URI for

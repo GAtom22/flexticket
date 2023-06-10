@@ -23,7 +23,6 @@ contract EventManager {
     string _symbol;
     uint256 _initialPrice;
     uint256 _basePrice;
-    uint256 _initialPrice;
     uint256 _totalTickets;
   }
 
@@ -83,7 +82,7 @@ contract EventManager {
     events.push(newEvent);
   }
 
-  function getEventDetails(uint256 _eventId) public view returns (Event) {
+  function getEventDetails(uint256 _eventId) public view returns (Event memory) {
     require(_eventId < events.length, "Invalid event ID");
 
     Event memory e = events[_eventId];
@@ -99,10 +98,11 @@ contract EventManager {
     // and store on the ticketManagers mapping
     TicketTier[] memory ticketTiers = e.ticketTiers;
     for (uint256 i = 0; i < ticketTiers.length; i++) {
-      TicketTier tier = ticketTiers[i];
+      TicketTier memory tier = ticketTiers[i];
       TicketManager ticketManager = new TicketManager(
         e.name,
-        tier._tierName,
+        _eventId,
+        i,  // tierId
         tier._baseURI,
         tier._symbol,
         tier._basePrice,
@@ -115,9 +115,9 @@ contract EventManager {
     }
   }
 
-  function getTicketPrice(uint256 _eventId, uint256 _ticketTier) public view validEventAndTier(_eventId, _ticketTier) returns (uint256) {
+  function getTicketPrice(uint256 _eventId, uint256 _ticketTier) public validEventAndTier(_eventId, _ticketTier) returns (uint256) {
     TicketManager ticketManager = TicketManager(ticketManagers[_eventId][_ticketTier]);
-    return ticketManager.getTicketPrice();
+    return ticketManager.getCurrentPrice();
   }
 
   function buyTicket(uint256 _eventId, uint256 _ticketTier) public payable validEventAndTier(_eventId, _ticketTier) {
