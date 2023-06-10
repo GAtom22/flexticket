@@ -21,7 +21,9 @@ contract EventManager {
     string _tierName;
     string _baseURI;
     string _symbol;
+    uint256 _initialPrice;
     uint256 _basePrice;
+    uint256 _initialPrice;
     uint256 _totalTickets;
   }
 
@@ -104,6 +106,7 @@ contract EventManager {
         tier._baseURI,
         tier._symbol,
         tier._basePrice,
+        tier._initialPrice,
         tier._totalTickets,
         e.startDate,
         e.endDate

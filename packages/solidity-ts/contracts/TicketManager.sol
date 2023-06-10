@@ -12,6 +12,7 @@ contract TicketManager is Ownable {
   // Public variables
   uint256 public tierName; // The name of the ticket tier
   uint256 public basePrice; // The base price of each ticket
+  uint256 public initialPrice; // The initial price of the ticket tier. Used for the getCurrentPrice equation that starts with a high initial price
   address public nftAddress; // The address of the NFT contract (tickets)
   uint256 public totalTickets; // The total number of tickets available for sale
   uint256 public ticketsSold; // The number of tickets sold so far
@@ -32,6 +33,7 @@ contract TicketManager is Ownable {
     string memory _baseURI,
     string memory _symbol,
     uint256 _basePrice,
+    uint256 _initialPrice,
     uint256 _totalTickets,
     uint256 _startTime,
     uint256 _endTime
