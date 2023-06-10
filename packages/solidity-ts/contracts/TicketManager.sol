@@ -15,8 +15,11 @@ contract TicketManager is Ownable {
   uint256 public tierId; // The ticket tier id
   uint256 public basePrice; // The base price of each ticket
   uint256 public initialPrice; // The initial price of the ticket tier. Used for the getCurrentPrice equation that starts with a high initial price
-  uint256 public priceSlope; // The slope of the decreasing pricing equation
-  uint256 public yIntercept; // The y-intercept of the decreasing pricing equation
+  uint256 public currentPrice; // The current price of the ticket tier
+  uint256 public lastPriceUpdate; // The timestamp of the last price update
+  uint256 public priceUpdateInterval; // The time interval to update the price
+  uint256 public decayPercentage; // The percentage of the price range to consider for decreasing the price when no sales
+  uint256 public salesTimeInterval; // The time interval to consider for calculating sales rates (ex. hours, minutes, days)
   address public nftAddress; // The address of the NFT contract (tickets)
   uint256 public totalTickets; // The total number of tickets available for sale
   uint256 public ticketsSold; // The number of tickets sold so far
@@ -50,13 +53,16 @@ contract TicketManager is Ownable {
     tierId = _tierId;
     basePrice = _basePrice;
     initialPrice = _initialPrice;
+    currentPrice = _initialPrice;
     totalTickets = _totalTickets;
     startTime = _startTime;
     endTime = _endTime;
 
-    uint256 timeSpan = _endTime.sub(_startTime);
-    priceSlope = basePrice.sub(initialPrice).div(timeSpan);
-    yIntercept = initialPrice.sub(startTime.mul(priceSlope));
+    lastPriceUpdate = block.timestamp;
+
+    priceUpdateInterval = 60; // 1 min
+    decayPercentage = 100; // 1%
+    salesTimeInterval = 30; // 30 secs
 
     // Create a new NFT contract for the event
     EventTicket nftContract = new EventTicket(string(abi.encodePacked(_eventName, " Ticket")), _symbol, _totalTickets, _baseURI);
@@ -88,38 +94,50 @@ contract TicketManager is Ownable {
 
   // Function to get the current price of a ticket based on market conditions
   function getCurrentPrice() public returns (uint256) {
+    require(block.timestamp >= startTime, "Ticket sales didn't started yet");
     require(block.timestamp <= endTime, "Ticket sales ended");
     uint256 ticketsLeft = totalTickets.sub(ticketsSold);
     require(ticketsLeft > 0, "No more tickets left!");
 
-    uint256 timeLeft = endTime.sub(block.timestamp).div(3600); // time left
-    uint256 hoursLeft = timeLeft.div(3600); // time left in hours
-    uint256 adjustedPrice;
+    uint256 timeLeft = endTime.sub(block.timestamp).div(salesTimeInterval); // time left in the defined time interval (hours, days, mins, etc.)
 
-    // Calculate the average number of tickets sold per hour
-    uint256 hoursElapsed = block.timestamp.sub(startTime).div(3600);
+    // Calculate the average number of tickets sold per time interval
+    uint256 timeElapsed = block.timestamp.sub(startTime).div(salesTimeInterval);
     uint256 saleRate = 0;
-    if (hoursElapsed > 0) {
-      saleRate = ticketsSold.div(hoursElapsed);
+    if (timeElapsed > 0) {
+      saleRate = ticketsSold.div(timeElapsed);
     }
 
-    // no sales rate, use base price
+    // no sales rate, decrease current price
     if (saleRate == 0) {
-      // gradually decrease the initialPrice
-      // linear eq: price = time . slope + yInt
-      adjustedPrice = yIntercept.add(block.timestamp.mul(priceSlope));
+      // if no sales, update price every 1 min (to be an adjustable param)
+      if (block.timestamp.sub(lastPriceUpdate) > priceUpdateInterval) {
+        // gradually decrease the price
+        uint256 priceSpan = initialPrice.sub(basePrice);
+        uint256 delta = priceSpan.div(decayPercentage);
 
-      emit PriceChanged(eventId, tierId, adjustedPrice);
+        currentPrice = currentPrice.sub(delta);
 
-      return adjustedPrice;
+        if (currentPrice < basePrice) {
+          currentPrice = basePrice;
+        }
+        lastPriceUpdate = block.timestamp;
+
+        emit PriceChanged(eventId, tierId, currentPrice);
+      }
+
+      return currentPrice;
     }
 
     // Calculate the target sale rate based on the remaining time and inventory
-    // Sell remaining tickets in half the remaining time
-    if (hoursLeft == 0) {
-      hoursLeft = 1;
+    // Sell remaining tickets in the remaining time
+    if (timeLeft == 0) {
+      timeLeft = 1;
     }
-    uint256 targetSaleRate = ticketsLeft.mul(2).div(hoursLeft);
+    uint256 targetSaleRate = ticketsLeft.div(timeLeft);
+    if (targetSaleRate == 0) {
+      targetSaleRate = 1;
+    }
 
     // start at initial price
     // decrease if salesRate < targetRate
@@ -127,35 +145,34 @@ contract TicketManager is Ownable {
 
     // Calculate the adjustment factor based on the difference
     // between the target and actual sale rates
-    uint256 adjustmentFactor = saleRate.sub(targetSaleRate).mul(100).div(targetSaleRate);
-
-    uint256 price = yIntercept.add(block.timestamp.mul(priceSlope));
-
-    //Apply the adjustment factor to the base price
-    adjustedPrice = price.add(adjustmentFactor);
-
-    // price cannot be lower than basePrice
-    if (adjustedPrice < basePrice) {
-      adjustedPrice = basePrice;
+    uint256 adjustmentFactor;
+    if (saleRate >= targetSaleRate) {
+      adjustmentFactor = (saleRate.sub(targetSaleRate)).mul(100).div(targetSaleRate);
+      if (adjustmentFactor == 0) {
+        uint256 priceSpan = initialPrice.sub(basePrice);
+        adjustmentFactor = priceSpan.div(decayPercentage);
+      }
+      currentPrice = currentPrice.add(adjustmentFactor);
     } else {
-      // update the y-intercept and slope
-      priceSlope = basePrice.sub(adjustedPrice).div(timeLeft);
-      yIntercept = adjustedPrice.sub(block.timestamp.mul(priceSlope));
+      adjustmentFactor = (targetSaleRate.sub(saleRate)).mul(100).div(targetSaleRate);
+      //Apply the adjustment factor to the base price
+      currentPrice = currentPrice.sub(adjustmentFactor);
     }
 
-    emit PriceChanged(eventId, tierId, adjustedPrice);
+    // price cannot be lower than basePrice
+    if (currentPrice < basePrice) {
+      currentPrice = basePrice;
+    }
+    lastPriceUpdate = block.timestamp;
 
-    return adjustedPrice;
+    emit PriceChanged(eventId, tierId, currentPrice);
+
+    return currentPrice;
   }
 
   // updateBasePrice function allows the contract owner to update the base ticket price for the event
   function updateBasePrice(uint256 newPrice) public onlyOwner {
     basePrice = newPrice;
-
-    // update price decline line
-    uint256 timeSpan = endTime.sub(block.timestamp);
-    priceSlope = basePrice.sub(initialPrice).div(timeSpan);
-    yIntercept = initialPrice.sub(startTime.mul(priceSlope));
 
     emit BasePriceChanged(eventId, tierId, newPrice);
   }
