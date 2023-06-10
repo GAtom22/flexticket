@@ -25,10 +25,10 @@ contract EventManager {
     uint256 _totalTickets;
   }
 
-  Event[] private events;
+  Event[] public events;
 
   // Map of ticket tiers per eventId
-  mapping(uint256 => TicketTier[]) private ticketTiers;
+  mapping(uint256 => TicketTier[]) public ticketTiers;
   // Map of the ticket managers per event per tier
   // map[eventID] -> map[tier] -> ticketManager address
   mapping(uint256 => mapping(uint256 => address)) private ticketManagers;
