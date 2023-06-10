@@ -150,6 +150,11 @@ contract TicketManager is Ownable {
   // updateBasePrice function allows the contract owner to update the base ticket price for the event
   function updateBasePrice(uint256 newPrice) public onlyOwner {
     basePrice = newPrice;
+
+    // update price decline line
+    priceSlope = basePrice.sub(initialPrice).div(timeSpan);
+    yIntercept = initialPrice.sub(startTime.mul(priceSlope));
+
     emit BasePriceChanged(eventId, tierId, newPrice);
   }
 

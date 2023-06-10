@@ -14,7 +14,6 @@ contract EventManager {
     string description;
     uint256 startDate;
     uint256 endDate;
-    TicketTier[] ticketTiers;
   }
 
   struct TicketTier {
@@ -28,6 +27,8 @@ contract EventManager {
 
   Event[] private events;
 
+  // Map of ticket tiers per eventId
+  mapping(uint256 => TicketTier[]) private ticketTiers;
   // Map of the ticket managers per event per tier
   // map[eventID] -> map[tier] -> ticketManager address
   mapping(uint256 => mapping(uint256 => address)) private ticketManagers;
@@ -46,40 +47,18 @@ contract EventManager {
     TicketTier[] memory _ticketTiers
   ) public payable {
     require(_startDate >= block.timestamp, "Event start date must be in the future");
+    require(_ticketTiers.length > 0, "Need to provide at least one ticket tier");
     require(msg.value >= fee, "Insufficient fee");
 
-    Event memory newEvent = Event({
-      owner: msg.sender,
-      name: _name,
-      description: _description,
-      startDate: _startDate,
-      endDate: _endDate,
-      ticketTiers: _ticketTiers
-    });
+    Event memory newEvent = Event({ owner: msg.sender, name: _name, description: _description, startDate: _startDate, endDate: _endDate });
 
     events.push(newEvent);
-  }
 
-  function registerEventWithFeePerTicketSold(
-    string memory _name,
-    string memory _description,
-    uint256 _startDate,
-    uint256 _endDate,
-    TicketTier[] memory _ticketTiers
-  ) public {
-    require(_startDate >= block.timestamp, "Event start date must be in the future");
-
-    // TODO add the custom logic for this type of registration
-    Event memory newEvent = Event({
-      owner: msg.sender,
-      name: _name,
-      description: _description,
-      startDate: _startDate,
-      endDate: _endDate,
-      ticketTiers: _ticketTiers
-    });
-
-    events.push(newEvent);
+    uint256 eventId = events.length - 1;
+    // Copy the elements from memory to storage
+    for (uint256 i = 0; i < _ticketTiers.length; i++) {
+      ticketTiers[eventId].push(_ticketTiers[i]);
+    }
   }
 
   function getEventDetails(uint256 _eventId) public view returns (Event memory) {
@@ -92,17 +71,18 @@ contract EventManager {
   function launchEvent(uint256 _eventId) public {
     require(_eventId < events.length, "Invalid event ID");
     Event memory e = events[_eventId];
-    require(e.ticketTiers.length > 0, "Events has no ticket tiers");
 
     // deploy a TicketManager for each tier
     // and store on the ticketManagers mapping
-    TicketTier[] memory ticketTiers = e.ticketTiers;
-    for (uint256 i = 0; i < ticketTiers.length; i++) {
-      TicketTier memory tier = ticketTiers[i];
+    TicketTier[] memory tiers = ticketTiers[_eventId];
+    require(tiers.length > 0, "Events has no ticket tiers");
+
+    for (uint256 i = 0; i < tiers.length; i++) {
+      TicketTier memory tier = tiers[i];
       TicketManager ticketManager = new TicketManager(
         e.name,
         _eventId,
-        i,  // tierId
+        i, // tierId
         tier._baseURI,
         tier._symbol,
         tier._basePrice,
@@ -152,9 +132,9 @@ contract EventManager {
 
   function withdrawAll(uint256 _eventId) public {
     require(_eventId < events.length, "Invalid event ID");
-    TicketTier[] memory ticketTiers = events[_eventId].ticketTiers;
+    TicketTier[] memory tiers = ticketTiers[_eventId];
 
-    for (uint256 i = 0; i < ticketTiers.length; i++) {
+    for (uint256 i = 0; i < tiers.length; i++) {
       if (ticketManagers[_eventId][i] != address(0)) {
         TicketManager ticketManager = TicketManager(ticketManagers[_eventId][i]);
         ticketManager.withdraw();
