@@ -10,7 +10,7 @@ import "./EventTicket.sol";
 contract TicketManager is Ownable {
   using SafeMath for uint256;
   // Public variables
-  uint256 public eventName; // The name of the event
+  string public eventName; // The name of the event
   uint256 public eventId; // The event id
   uint256 public tierId; // The ticket tier id
   uint256 public basePrice; // The base price of each ticket
@@ -26,7 +26,7 @@ contract TicketManager is Ownable {
   uint256 public discountPercentage; // The percentage discount applied to the base price of each ticket
 
   // Mapping to keep track of the number of tickets owned by each buyer
-  mapping(address => mapping(address => uint256)) ticketBalances;
+  mapping(address => mapping(address => uint256)) public ticketBalances;
 
   event TicketPurchased(address indexed buyer, uint256 eventId, uint256 tierId, uint256 price);
   event BasePriceChanged(uint256 eventId, uint256 tierId, uint256 price);
@@ -45,6 +45,7 @@ contract TicketManager is Ownable {
     uint256 _endTime
   ) {
     // Initialize public variables
+    eventName = _eventName;
     eventId = _eventId;
     tierId = _tierId;
     basePrice = _basePrice;
@@ -152,6 +153,7 @@ contract TicketManager is Ownable {
     basePrice = newPrice;
 
     // update price decline line
+    uint256 timeSpan = endTime.sub(block.timestamp);
     priceSlope = basePrice.sub(initialPrice).div(timeSpan);
     yIntercept = initialPrice.sub(startTime.mul(priceSlope));
 

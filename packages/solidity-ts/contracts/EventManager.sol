@@ -26,12 +26,13 @@ contract EventManager {
   }
 
   Event[] public events;
+  uint256 public eventsCount;
 
   // Map of ticket tiers per eventId
   mapping(uint256 => TicketTier[]) public ticketTiers;
   // Map of the ticket managers per event per tier
   // map[eventID] -> map[tier] -> ticketManager address
-  mapping(uint256 => mapping(uint256 => address)) private ticketManagers;
+  mapping(uint256 => mapping(uint256 => address)) public ticketManagers;
 
   modifier validEventAndTier(uint256 _eventId, uint256 _ticketTier) {
     require(_eventId < events.length, "Invalid event ID");
@@ -53,19 +54,13 @@ contract EventManager {
     Event memory newEvent = Event({ owner: msg.sender, name: _name, description: _description, startDate: _startDate, endDate: _endDate });
 
     events.push(newEvent);
+    eventsCount++;
 
     uint256 eventId = events.length - 1;
     // Copy the elements from memory to storage
     for (uint256 i = 0; i < _ticketTiers.length; i++) {
       ticketTiers[eventId].push(_ticketTiers[i]);
     }
-  }
-
-  function getEventDetails(uint256 _eventId) public view returns (Event memory) {
-    require(_eventId < events.length, "Invalid event ID");
-
-    Event memory e = events[_eventId];
-    return e;
   }
 
   function launchEvent(uint256 _eventId) public {
