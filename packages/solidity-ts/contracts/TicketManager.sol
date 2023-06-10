@@ -73,9 +73,11 @@ contract TicketManager is Ownable {
 
   // Function to get the current price of a ticket based on market conditions
   function getCurrentPrice() public view returns (uint256) {
-    uint256 timeLeft = endTime.sub(block.timestamp).div(3600); // time left in hours
+    require(block.timestamp <= endTime, "Ticket sales ended");
     uint256 ticketsLeft = totalTickets.sub(ticketsSold);
     require(ticketsLeft > 0, "No more tickets left!");
+
+    uint256 timeLeft = endTime.sub(block.timestamp).div(3600); // time left in hours
 
     // Calculate the average number of tickets sold per hour
     uint256 hoursElapsed = block.timestamp.sub(startTime).div(3600);
