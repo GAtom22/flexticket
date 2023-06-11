@@ -6,7 +6,7 @@ import "./TicketManager.sol";
 contract EventManager {
   // Fee used to charge the organizer if registering the event
   // paying a one-time fixed fee
-  uint256 public fee = 0.25 ether;
+  uint256 public fee = 0.001 ether;
 
   struct Event {
     address owner;
@@ -25,6 +25,8 @@ contract EventManager {
     uint256 _totalTickets;
   }
 
+  event CreatedEvent(address indexed organizer, uint256 eventId);
+
   Event[] public events;
   uint256 public eventsCount;
 
@@ -35,8 +37,8 @@ contract EventManager {
   mapping(uint256 => mapping(uint256 => address)) public ticketManagers;
 
   modifier validEventAndTier(uint256 _eventId, uint256 _ticketTier) {
-    require(_eventId < eventsCount, "Invalid event ID");
-    require(ticketManagers[_eventId][_ticketTier] != address(0), "Ticket tier for this event does not exist");
+    require(_eventId < eventsCount, "Invalid ID");
+    require(ticketManagers[_eventId][_ticketTier] != address(0), "tier does not exist");
     _;
   }
 
@@ -46,9 +48,9 @@ contract EventManager {
     uint256 _startDate,
     uint256 _endDate,
     TicketTier[] memory _ticketTiers
-  ) public payable {
-    require(_startDate >= block.timestamp, "Event start date must be in the future");
-    require(_ticketTiers.length > 0, "Need to provide at least one ticket tier");
+  ) public payable returns (uint256) {
+    require(_startDate >= block.timestamp, "start date must be in the future");
+    require(_ticketTiers.length > 0, "Provide at least one tier");
     require(msg.value >= fee, "Insufficient fee");
 
     Event memory newEvent = Event({ owner: msg.sender, name: _name, description: _description, startDate: _startDate, endDate: _endDate });
@@ -61,18 +63,24 @@ contract EventManager {
     for (uint256 i = 0; i < _ticketTiers.length; i++) {
       ticketTiers[eventId].push(_ticketTiers[i]);
     }
+
+    launchEvent(eventId);
+
+    emit CreatedEvent(msg.sender, eventId);
+
+    return eventId;
   }
 
   function launchEvent(uint256 _eventId) public {
-    require(_eventId < eventsCount, "Invalid event ID");
+    require(_eventId < eventsCount, "Invalid ID");
 
     Event memory e = events[_eventId];
-    require(msg.sender == e.owner, "Only event owner can launch the event");
+    require(msg.sender == e.owner, "launch not allowed");
 
     // deploy a TicketManager for each tier
     // and store on the ticketManagers mapping
     TicketTier[] memory tiers = ticketTiers[_eventId];
-    require(tiers.length > 0, "Events has no ticket tiers");
+    require(tiers.length > 0, "no tiers");
 
     for (uint256 i = 0; i < tiers.length; i++) {
       TicketTier memory tier = tiers[i];
@@ -99,6 +107,10 @@ contract EventManager {
 
   function getAllEvents() public view returns (Event[] memory) {
     return events;
+  }
+
+  function getTiersByEventId(uint256 _eventId) public view returns (TicketTier[] memory) {
+    return ticketTiers[_eventId];
   }
 
   function buyTicket(uint256 _eventId, uint256 _ticketTier) public payable validEventAndTier(_eventId, _ticketTier) {
@@ -132,11 +144,11 @@ contract EventManager {
   }
 
   function withdrawAll(uint256 _eventId) public {
-    require(_eventId < eventsCount, "Invalid event ID");
+    require(_eventId < eventsCount, "Invalid ID");
     TicketTier[] memory tiers = ticketTiers[_eventId];
 
     Event memory e = events[_eventId];
-    require(msg.sender == e.owner, "Only event owner can withdraw the event's revenue");
+    require(msg.sender == e.owner, "not allowed to withdraw");
 
     for (uint256 i = 0; i < tiers.length; i++) {
       if (ticketManagers[_eventId][i] != address(0)) {
@@ -144,5 +156,22 @@ contract EventManager {
         ticketManager.withdraw();
       }
     }
+  }
+
+  function getPurchasedTickets() public view returns (TicketMeta[] memory) {
+    TicketMeta[] memory tickets = new TicketMeta[](eventsCount);
+    uint256 index;
+    for (uint256 eventId = 0; eventId < eventsCount; eventId++) {
+      TicketTier[] memory tiers = ticketTiers[eventId];
+      for (uint256 i = 0; i < tiers.length; i++) {
+        if (ticketManagers[eventId][i] != address(0)) {
+          TicketManager ticketManager = TicketManager(ticketManagers[eventId][i]);
+          TicketMeta memory ticket = ticketManager.getTickets();
+          tickets[index] = ticket;
+          index++;
+        }
+      }
+    }
+    return tickets;
   }
 }

@@ -60,6 +60,18 @@ const networks = {
     //   mnemonic: getMnemonic(),
     // },
   },
+  'mantle-testnet': {
+    url: 'https://rpc.testnet.mantle.xyz/',
+    accounts: {
+      mnemonic: getMnemonic(),
+    },
+  },
+  scrollAlpha: {
+    url: 'https://alpha-rpc.scroll.io/l2',
+    accounts: {
+      mnemonic: getMnemonic(),
+    },
+  },
 };
 
 /**
@@ -79,7 +91,7 @@ export const config: HardhatUserConfig = {
   solidity: {
     compilers: [
       {
-        version: '0.8.10',
+        version: '0.8.18',
         settings: {
           optimizer: {
             enabled: true,
@@ -136,6 +148,30 @@ export const config: HardhatUserConfig = {
   typechain: {
     outDir: typechainOutDir,
     discriminateTypes: true,
+  },
+  etherscan: {
+    apiKey: {
+      'mantle-testnet': 'xyz',
+      scrollAlpha: 'abc',
+    },
+    customChains: [
+      {
+        network: 'mantle-testnet',
+        chainId: 5001,
+        urls: {
+          apiURL: 'https://explorer.testnet.mantle.xyz/api',
+          browserURL: 'https://explorer.testnet.mantle.xyz',
+        },
+      },
+      {
+        network: 'scrollAlpha',
+        chainId: 534353,
+        urls: {
+          apiURL: 'https://blockscout.scroll.io/api',
+          browserURL: 'https://blockscout.scroll.io/',
+        },
+      },
+    ],
   },
 };
 export default config;

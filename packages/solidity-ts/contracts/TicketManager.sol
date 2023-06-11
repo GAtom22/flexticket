@@ -5,12 +5,21 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "./EventTicket.sol";
 
+struct TicketMeta {
+  string eventName;
+  uint256 tierId;
+  string symbol;
+  uint256 count;
+  address nftContractAddress;
+}
+
 // This contract manages the sale of tickets for an event using an NFT contract
 // It inherits the Ownable contract to ensure that only the contract owner can call certain functions
 contract TicketManager is Ownable {
   using SafeMath for uint256;
   // Public variables
   string public eventName; // The name of the event
+  string public symbol; // The symbol for the NFT related to the tier
   uint256 public eventId; // The event id
   uint256 public tierId; // The ticket tier id
   uint256 public basePrice; // The base price of each ticket
@@ -29,7 +38,7 @@ contract TicketManager is Ownable {
   uint256 public discountPercentage; // The percentage discount applied to the base price of each ticket
 
   // Mapping to keep track of the number of tickets owned by each buyer
-  mapping(address => mapping(address => uint256)) public ticketBalances;
+  mapping(address => uint256) public ticketBalances;
 
   event TicketPurchased(address indexed buyer, uint256 eventId, uint256 tierId, uint256 price);
   event BasePriceChanged(uint256 eventId, uint256 tierId, uint256 price);
@@ -49,6 +58,7 @@ contract TicketManager is Ownable {
   ) {
     // Initialize public variables
     eventName = _eventName;
+    symbol = _symbol;
     eventId = _eventId;
     tierId = _tierId;
     basePrice = _basePrice;
@@ -71,12 +81,12 @@ contract TicketManager is Ownable {
 
   // Function to purchase a ticket
   function purchaseTicket() public payable {
-    require(block.timestamp >= startTime, "Ticket sales have not started yet");
-    require(block.timestamp <= endTime, "Ticket sales have ended");
-    require(totalTickets > ticketsSold, "This event sold out!");
+    require(block.timestamp >= startTime, "sales not started yet");
+    require(block.timestamp <= endTime, "sales ended");
+    require(totalTickets > ticketsSold, "event sold out!");
 
     uint256 price = getCurrentPrice();
-    require(msg.value >= price, "Current ticket price is higher than the provided value");
+    require(msg.value >= price, "Current price is higher");
 
     EventTicket nftContract = EventTicket(nftAddress);
 
@@ -86,7 +96,7 @@ contract TicketManager is Ownable {
     nftContract.mint(buyer);
 
     // Update the ticket balance of the buyer
-    ticketBalances[buyer][nftAddress]++;
+    ticketBalances[buyer]++;
 
     ticketsSold++;
     totalRevenue += msg.value;
@@ -94,12 +104,20 @@ contract TicketManager is Ownable {
     emit TicketPurchased(buyer, eventId, tierId, msg.value);
   }
 
+  function getTickets() public view returns (TicketMeta memory) {
+    // for now, only tx.origin can buy tickets
+    // so return their balance
+    uint256 count = ticketBalances[tx.origin];
+    TicketMeta memory data = TicketMeta(eventName, tierId, symbol, count, nftAddress);
+    return data;
+  }
+
   // Function to get the current price of a ticket based on market conditions
   function getCurrentPrice() public returns (uint256) {
-    require(block.timestamp >= startTime, "Ticket sales didn't started yet");
-    require(block.timestamp <= endTime, "Ticket sales ended");
+    require(block.timestamp >= startTime, "didn't started yet");
+    require(block.timestamp <= endTime, "sales ended");
     uint256 ticketsLeft = totalTickets.sub(ticketsSold);
-    require(ticketsLeft > 0, "No more tickets left!");
+    require(ticketsLeft > 0, "sold out!");
 
     uint256 timeLeft = endTime.sub(block.timestamp).div(salesTimeInterval); // time left in the defined time interval (hours, days, mins, etc.)
 
@@ -189,16 +207,16 @@ contract TicketManager is Ownable {
 
   // setDiscount function allows the contract owner to set a discount percentage for the ticket price
   function setDiscount(uint256 percentage) public onlyOwner {
-    require(discountPercentage == 0, "Need to cancel the current discount to set a new discount rate");
-    require(percentage < 100, "Discount should be less than 100%, otherwise is not a discount");
-    require(percentage > 0, "Discount should be a positive number between 0 and 99");
+    require(discountPercentage == 0, "cancel current discount to set a new one");
+    require(percentage < 100, "should be less than 100%");
+    require(percentage > 0, "should be positive number (0-99)");
     discountPercentage = percentage;
     basePrice = (basePrice * (100 - percentage)) / 100;
   }
 
   // cancelDiscount function allows the contract owner to cancel any previously set discount
   function cancelDiscount() public onlyOwner {
-    require(discountPercentage > 0, "There's no discount to cancel");
+    require(discountPercentage > 0, "no discount to cancel");
     basePrice = (basePrice * 100) / (100 - discountPercentage);
     discountPercentage = 0;
   }
@@ -210,8 +228,8 @@ contract TicketManager is Ownable {
     if (ticketsLeft == 0) {
       endTime = block.timestamp;
     }
-    require(block.timestamp > endTime, "Ticket sales still active");
+    require(block.timestamp > endTime, "still active");
     (bool sent, ) = owner().call{ value: totalRevenue }("");
-    require(sent, "Failed to withdraw the revenue");
+    require(sent, "Failed to withdraw");
   }
 }
